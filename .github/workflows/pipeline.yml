@@ -1,10 +1,11 @@
+
 name: Tourism Project Pipeline
 
 on:
   push:
     branches:
-      - main  
-  workflow_dispatch: 
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,63 +14,213 @@ jobs:
 
   register-dataset:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Training Dependencies
-        run: pip install -r tourism_project/requirements.txt 
+
+      - name: Install Dependencies
+        run: |
+          pip install -r tourism_project/requirements.txt
+
       - name: Register Dataset
-        run: python tourism_project/model_building/data_register.py
-      - name: Upload Registered Dataset
+        run: |
+          python tourism_project/model_building/data_register.py
+
+      - name: Upload Dataset
         uses: actions/upload-artifact@v4
         with:
           name: registered-data
           path: tourism_project/data/tourism.csv
 
+
   data-prep:
     needs: register-dataset
     runs-on: ubuntu-latest
+
     steps:
+
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Training Dependencies
-        run: pip install -r tourism_project/requirements.txt 
+
+      - name: Install Dependencies
+        run: |
+          pip install -r tourism_project/requirements.txt
+
       - name: Run Data Preparation
-        run: python tourism_project/model_building/prep.py   
-      - name: Upload Train Test Splits
+        run: |
+          python tourism_project/model_building/prep.py
+
+      - name: Upload Splits
         uses: actions/upload-artifact@v4
         with:
           name: data-splits
           path: data-splits/
 
+
   model-traning:
+
     needs: data-prep
+
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+
+    timeout-minutes: 30
+
     steps:
+
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Training Dependencies
-        run: pip install -r tourism_project/requirements.txt
+
+      - name: Install Dependencies
+        run: |
+          pip install -r tourism_project/requirements.txt
+
       - name: Download Train Test Splits
         uses: actions/download-artifact@v4
         with:
           name: data-splits
           path: data-splits/
-      - name: Model Building and Remote MLflow Logging
-        env:
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-        run: python tourism_project/model_building/train.py
+
+      ########################################################
+      # Install ngrok
+      ########################################################
+
+      - name: Install ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+          | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+
+          echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" \
+          | sudo tee /etc/apt/sources.list.d/ngrok.list
+
+          sudo apt update
+
+          sudo apt install ngrok
+
+      ########################################################
+      # Configure ngrok
+      ########################################################
+
+      - name: Configure ngrok
+        run: |
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      ########################################################
+      # Start MLflow
+      ########################################################
+
+      - name: Start MLflow Server
+        run: |
+
+          mkdir -p mlflow_backend
+          mkdir -p mlflow_artifacts
+
+          nohup mlflow server \
+            --host 0.0.0.0 \
+            --port 5000 \
+            --backend-store-uri file:./mlflow_backend \
+            --artifacts-destination ./mlflow_artifacts \
+            --serve-artifacts \
+            > mlflow.log 2>&1 &
+
+          sleep 15
+
+      ########################################################
+      # Start ngrok
+      ########################################################
+
+      - name: Start ngrok
+        run: |
+
+          nohup ngrok http 5000 > ngrok.log 2>&1 &
+
+          sleep 10
+
+      ########################################################
+      # Wait until MLflow responds
+      ########################################################
+
+      - name: Wait for MLflow
+        run: |
+
+          for i in {1..30}
+          do
+            if curl -f http://127.0.0.1:5000 > /dev/null 2>&1
+            then
+              echo "MLflow Started"
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "MLflow failed"
+
+          cat mlflow.log
+
+          exit 1
+
+      ########################################################
+      # Get ngrok URL
+      ########################################################
+
+      - name: Export Tracking URI
+        run: |
+
+          URL=$(curl -s http://127.0.0.1:4040/api/tunnels \
+          | python -c "import sys,json;print(json.load(sys.stdin)['tunnels'][0]['public_url'])")
+
+          echo "MLFLOW_TRACKING_URI=$URL" >> $GITHUB_ENV
+
+          echo ""
+          echo "======================================"
+          echo "MLflow URL:"
+          echo "$URL"
+          echo "======================================"
+
+      ########################################################
+      # Train Model
+      ########################################################
+
+      - name: Model Building and MLflow Logging
+        run: |
+          python tourism_project/model_building/train.py
+
+      ########################################################
+      # Upload MLflow logs (optional)
+      ########################################################
+
+      - name: Upload MLflow Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-data
+          path: |
+            mlflow_backend
+            mlflow_artifacts
+            mlflow.log
+            ngrok.log
+
+      ########################################################
+      # Commit trained model
+      ########################################################
+
       - name: Commit Trained Model
         run: |
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tourism_project/deployment/best_model_tourism_package_prediction_v1.joblib   
-          git commit -m "Add trained model [skip ci]" || echo "No changes to commit"
+
+          git add tourism_project/deployment/best_model_tourism_package_prediction_v1.joblib
+
+          git commit -m "Add trained model [skip ci]" || echo "Nothing to commit"
+
           git push

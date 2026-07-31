@@ -84,21 +84,25 @@ model_pipeline = Pipeline(steps=[
 param_grid = { "xgbclassifier__n_estimators": [50, 75, 80,100], "xgbclassifier__max_depth": [2,3,4,5,6,7,8], "xgbclassifier__learning_rate": [0.05, 0.08,0.1,0.15]}
 
 # Configure Local MLflow Repository Space
-if "MLFLOW_TRACKING_URI" in os.environ and os.environ["MLFLOW_TRACKING_URI"].strip():
-    tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
-    print(f"📡 Routing parameter matrix over internet to active Ngrok destination: {tracking_uri}")
-    mlflow.set_tracking_uri(tracking_uri)
-else:
-    print("⚠️ Ngrok URL missing. Logging locally inside repository context: ./mlruns")
-    mlflow.set_tracking_uri("file:./mlruns")
-
-mlflow.set_experiment("Tourism_Package_XGBoost_V3")
+# if "MLFLOW_TRACKING_URI" in os.environ and os.environ["MLFLOW_TRACKING_URI"].strip():
+#     tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
+#     print(f"📡 Routing parameter matrix over internet to active Ngrok destination: {tracking_uri}")
+#     mlflow.set_tracking_uri(tracking_uri)
+# else:
+#     print("⚠️ Ngrok URL missing. Logging locally inside repository context: ./mlruns")
+#     mlflow.set_tracking_uri("file:./mlruns")
+tracking_uri = os.getenv["MLFLOW_TRACKING_URI"]
+mlflow.set_tracking_uri(tracking_uri)
+mlflow.set_experiment("Tourism_Package_XGBoost_V4")
 
 # =====================================================================
 # 4. HYPERPARAMETER TUNING & MANUAL MLFLOW NESTED LOGGING
 # =====================================================================
+
 with mlflow.start_run() as parent_run:
     print("Executing hyperparameter space grid optimization...")
+    print("Tracking URI:", mlflow.get_tracking_uri())
+    print("Artifact URI:", mlflow.get_artifact_uri())
     # Grid Search using 5-Fold cross-validation matching your coding style
     grid_search = GridSearchCV(model_pipeline, param_grid, cv=5, n_jobs=-1, scoring='f1')
     grid_search.fit(Xtrain, ytrain)
@@ -159,7 +163,7 @@ with mlflow.start_run() as parent_run:
     
     # Save model and log artifact safely
     model_dir = "tourism_project/deployment"
-    # os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "best_model_tourism_package_prediction_v1.joblib")
     joblib.dump(best_model, model_path)
     mlflow.log_artifact(model_path, artifact_path="model")
