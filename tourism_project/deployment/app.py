@@ -13,6 +13,10 @@ model_path = os.path.join(os.path.dirname(__file__), "best_model_tourism_package
 def load_pipeline(path):
     return joblib.load(path)
 
+if not os.path.exists(model_path):
+    st.error(f"Model file not found: {model_path}")
+    st.stop()
+
 try:
     model = load_pipeline(model_path)
 except Exception as e:
@@ -117,25 +121,31 @@ feature_order = [
 ]
 input_data = input_data[feature_order] 
 
-# Execute prediction step safely
-if st.button("Evaluate Package Purchase Likelihood"):
-    probabilities = model.predict_proba(input_data)
 
 
 # Execute prediction step
 if st.button("Evaluate Package Purchase Likelihood"):
     probabilities = model.predict_proba(input_data)
     purchase_probability = probabilities[0][1]
-    
+
     classification_threshold = 0.45
     prediction = 1 if purchase_probability >= classification_threshold else 0
-    
+
     st.subheader("Analysis & Outcome Breakdown:")
-    
+
     if prediction == 1:
-        st.success(f"### **Prediction: High Conversion Potential (Target Class 1)**")
-        st.metric(label="Calculated Purchase Propensity", value=f"{purchase_probability * 100:.2f}%", delta="Exceeds 45% Threshold")
+        st.success("### Prediction: High Conversion Potential (Target Class 1)")
+        st.metric(
+            label="Calculated Purchase Propensity",
+            value=f"{purchase_probability*100:.2f}%",
+            delta="Exceeds 45% Threshold"
+        )
         st.balloons()
     else:
-        st.warning(f"### **Prediction: Low Conversion Potential (Target Class 0)**")
-        st.metric(label="Calculated Purchase Propensity", value=f"{purchase_probability * 100:.2f}%", delta=f"-{(classification_threshold - purchase_probability)*100:.2f}% to threshold", delta_color="inverse")
+        st.warning("### Prediction: Low Conversion Potential (Target Class 0)")
+        st.metric(
+            label="Calculated Purchase Propensity",
+            value=f"{purchase_probability*100:.2f}%",
+            delta=f"-{(classification_threshold-purchase_probability)*100:.2f}% to threshold",
+            delta_color="inverse"
+        )
