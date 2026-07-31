@@ -44,13 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: data-splits
-          path: |
-            Xtrain.csv
-            Xtest.csv
-            Xval.csv
-            ytrain.csv
-            ytest.csv
-            yval.csv
+          path: data-splits/
 
   model-traning:
     needs: data-prep
@@ -67,6 +61,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: data-splits
+          path: data-splits/
       - name: Model Building and Remote MLflow Logging
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
