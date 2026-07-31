@@ -92,7 +92,7 @@ else:
     print("⚠️ Ngrok URL missing. Logging locally inside repository context: ./mlruns")
     mlflow.set_tracking_uri("file:./mlruns")
 
-mlflow.set_experiment("Tourism_Package_XGBoost")
+mlflow.set_experiment("Tourism_Package_XGBoost_V1")
 
 # =====================================================================
 # 4. HYPERPARAMETER TUNING & MANUAL MLFLOW NESTED LOGGING
