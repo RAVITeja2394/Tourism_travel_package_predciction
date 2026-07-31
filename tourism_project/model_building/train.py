@@ -91,7 +91,7 @@ param_grid = { "xgbclassifier__n_estimators": [50, 75, 80,100], "xgbclassifier__
 # else:
 #     print("⚠️ Ngrok URL missing. Logging locally inside repository context: ./mlruns")
 #     mlflow.set_tracking_uri("file:./mlruns")
-tracking_uri = os.getenv["MLFLOW_TRACKING_URI"]
+tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 mlflow.set_tracking_uri(tracking_uri)
 mlflow.set_experiment("Tourism_Package_XGBoost_V4")
 
