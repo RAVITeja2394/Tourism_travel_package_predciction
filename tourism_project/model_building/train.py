@@ -92,7 +92,7 @@ else:
     print("⚠️ Ngrok URL missing. Logging locally inside repository context: ./mlruns")
     mlflow.set_tracking_uri("file:./mlruns")
 
-mlflow.set_experiment("Tourism_Package_XGBoost_V1")
+mlflow.set_experiment("Tourism_Package_XGBoost_V2")
 
 # =====================================================================
 # 4. HYPERPARAMETER TUNING & MANUAL MLFLOW NESTED LOGGING
@@ -159,7 +159,7 @@ with mlflow.start_run() as parent_run:
     
     # Save model and log artifact safely
     model_dir = "tourism_project/deployment"
-    os.makedirs(model_dir, exist_ok=True)
+    # os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "best_model_tourism_package_prediction_v1.joblib")
     joblib.dump(best_model, model_path)
     mlflow.log_artifact(model_path, artifact_path="model")
