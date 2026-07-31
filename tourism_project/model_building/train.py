@@ -19,10 +19,10 @@ print("--- STARTING TOURISM CONVERSION ML PIPELINE ---")
 # 1. LOAD THE PREPARED SPLITS (From prep.py)
 # =====================================================================
 try:
-    Xtrain = pd.read_csv("Xtrain.csv")
-    Xval = pd.read_csv("Xval.csv")
-    ytrain = pd.read_csv("ytrain.csv").squeeze()
-    yval = pd.read_csv("yval.csv").squeeze()
+    Xtrain = pd.read_csv("data-splits/Xtrain.csv")
+    Xval = pd.read_csv("data-splits/Xval.csv")
+    ytrain = pd.read_csv("data-splits/ytrain.csv").squeeze()
+    yval = pd.read_csv("data-splits/yval.csv").squeeze()
 except FileNotFoundError as e:
     print(f"Critical Data split files missing. {e}")
     sys.exit(1)
