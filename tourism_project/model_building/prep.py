@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import numpy as np
+import os
 
 # Load Data
 df = pd.read_csv('tourism_project/data/tourism.csv')
@@ -92,11 +93,16 @@ X_train, X_val, y_train, y_val = train_test_split(
 )
 
 # Save Splits to CSV files
-X_train.to_csv("Xtrain.csv", index=False)
-X_test.to_csv("Xtest.csv", index=False)
-X_val.to_csv("Xval.csv", index=False)
-y_train.to_csv("ytrain.csv", index=False)
-y_test.to_csv("ytest.csv", index=False)
-y_val.to_csv("yval.csv", index=False)
+output_dir = "data-splits"
+os.makedirs(output_dir, exist_ok=True)
+
+X_train.to_csv(os.path.join(output_dir, "Xtrain.csv"), index=False)
+X_test.to_csv(os.path.join(output_dir, "Xtest.csv"), index=False)
+X_val.to_csv(os.path.join(output_dir, "Xval.csv"), index=False) 
+y_train.to_csv(os.path.join(output_dir, "ytrain.csv"), index=False)
+y_test.to_csv(os.path.join(output_dir, "ytest.csv"), index=False)
+y_val.to_csv(os.path.join(output_dir, "yval.csv"), index=False)
+
+
 
 print("Data successfully prepared: train/val/test splits written.")
