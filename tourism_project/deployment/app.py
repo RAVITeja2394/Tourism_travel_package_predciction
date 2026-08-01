@@ -35,7 +35,7 @@ with col1:
     Occupation = st.selectbox("Occupation Category", ["Salaried", "Small Business", "Large Business", "Free Lancer"], index=0)
 
 with col2:
-    MonthlyIncome = st.number_input("Monthly Income (INR)", min_value=0.0, max_value=500000.0, value=25000.0, step=500.0)
+    MonthlyIncome = st.number_input("Monthly Income", min_value=0.0, max_value=500000.0, value=25000.0, step=500.0)
     Life_Stage = st.selectbox("Life Stage Profile", ["Single", "Married", "Divorced", "Unmarried"], index=1)
     Passport = st.selectbox("Possesses Valid Passport?", [1, 0], format_func=lambda x: "Yes (1)" if x == 1 else "No (0)", index=1)
 
@@ -86,7 +86,7 @@ input_data = pd.DataFrame([{
     "MonthlyIncome": MonthlyIncome,
     "NumberOfFollowups": NumberOfFollowups,
     "NumberOfTrips": NumberOfTrips,
-    "Interaction_Efficiency": Interaction_Efficiency, 
+    "Interaction_Efficiency": Interaction_Efficiency,
     "TypeofContact": TypeofContact,
     "ProductPitched": ProductPitched,
     "Occupation": Occupation,
@@ -94,16 +94,16 @@ input_data = pd.DataFrame([{
     "CityTier": CityTier,
     "PreferredPropertyStar": PreferredPropertyStar,
     "PitchSatisfactionScore": PitchSatisfactionScore,
-    "Age_bucket": Age_bucket,                         
+    "Age_bucket": Age_bucket,
     "Passport": Passport,
     "Total_Group_Size": Total_Group_Size,
-    "Is_Young_Executive": Is_Young_Executive,         
-    "Pitch_Alignment": Pitch_Alignment                 
+    "Is_Young_Executive": Is_Young_Executive,
+    "Pitch_Alignment": Pitch_Alignment
 }])
 
 # Enforce strict clean data typings matching prep.py assertions
 
-categorical_cols = ['TypeofContact', 'ProductPitched', 'Occupation', 'Life_Stage', 
+categorical_cols = ['TypeofContact', 'ProductPitched', 'Occupation', 'Life_Stage',
                     'CityTier', 'PreferredPropertyStar', 'PitchSatisfactionScore', 'Age_bucket']
 for col in categorical_cols:
     input_data[col] = input_data[col].astype(str)
@@ -116,10 +116,10 @@ for col in numeric_cols:
 feature_order = [
     'DurationOfPitch', 'MonthlyIncome', 'NumberOfFollowups', 'NumberOfTrips', 'Interaction_Efficiency',
     'TypeofContact', 'ProductPitched', 'Occupation', 'Life_Stage', 'Age_bucket',
-    'CityTier', 'PreferredPropertyStar', 'PitchSatisfactionScore', 'Passport', 
+    'CityTier', 'PreferredPropertyStar', 'PitchSatisfactionScore', 'Passport',
     'Total_Group_Size', 'Is_Young_Executive', 'Pitch_Alignment'
 ]
-input_data = input_data[feature_order] 
+input_data = input_data[feature_order]
 
 
 

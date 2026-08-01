@@ -98,7 +98,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 X_train.to_csv(os.path.join(output_dir, "Xtrain.csv"), index=False)
 X_test.to_csv(os.path.join(output_dir, "Xtest.csv"), index=False)
-X_val.to_csv(os.path.join(output_dir, "Xval.csv"), index=False) 
+X_val.to_csv(os.path.join(output_dir, "Xval.csv"), index=False)
 y_train.to_csv(os.path.join(output_dir, "ytrain.csv"), index=False)
 y_test.to_csv(os.path.join(output_dir, "ytest.csv"), index=False)
 y_val.to_csv(os.path.join(output_dir, "yval.csv"), index=False)

@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import mlflow
-import joblib  
-from sklearn.model_selection import GridSearchCV
+import joblib
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.pipeline import Pipeline
@@ -23,6 +23,8 @@ try:
     Xval = pd.read_csv("data-splits/Xval.csv")
     ytrain = pd.read_csv("data-splits/ytrain.csv").squeeze()
     yval = pd.read_csv("data-splits/yval.csv").squeeze()
+    Xtest = pd.read_csv("data-splits/Xtest.csv")
+    ytest = pd.read_csv("data-splits/ytest.csv").squeeze()
 except FileNotFoundError as e:
     print(f"Critical Data split files missing. {e}")
     sys.exit(1)
@@ -36,6 +38,8 @@ for col in categorical_data_types:
         Xtrain[col] = Xtrain[col].astype(str)
     if col in Xval.columns:
         Xval[col] = Xval[col].astype(str)
+    if col in Xtest.columns:
+        Xtest[col] = Xtest[col].astype(str)
 
 # Ensure numeric columns are strictly float/int
 numeric_data_types = ['DurationOfPitch', 'MonthlyIncome', 'NumberOfFollowups', 'NumberOfTrips', 'Interaction_Efficiency']
@@ -44,6 +48,8 @@ for col in numeric_data_types:
         Xtrain[col] = Xtrain[col].astype(float)
     if col in Xval.columns:
         Xval[col] = Xval[col].astype(float)
+    if col in Xtest.columns:
+        Xtest[col] = Xtest[col].astype(float)
 
 # =====================================================================
 # 2. DEFINE PIPELINE ARCHITECTURE & VARIABLE ROUTING
@@ -58,7 +64,7 @@ preprocessor = ColumnTransformer(
         ('num', StandardScaler(), numeric_features),
         ('nom', OneHotEncoder(handle_unknown='ignore', drop='first'), nominal_features),
         ('ord', OrdinalEncoder(
-            categories=age_order, 
+            categories=age_order,
             handle_unknown='use_encoded_value',
             unknown_value=-1
          ), ordinal_features)
@@ -70,7 +76,7 @@ preprocessor = ColumnTransformer(
 class_weight = (ytrain == 0).sum() / (ytrain == 1).sum()
 
 # Base XGBoost model matching your architectural constraints
-xgb_model = xgb.XGBClassifier(scale_pos_weight=class_weight, random_state=42, eval_metric='logloss')
+xgb_model = xgb.XGBClassifier(scale_pos_weight=class_weight, random_state=42, eval_metric='logloss',tree_method="hist",objective="binary:logistic")
 
 # Construct the uniform model pipeline
 model_pipeline = Pipeline(steps=[
@@ -81,7 +87,19 @@ model_pipeline = Pipeline(steps=[
 # =====================================================================
 # 3. DEFINE EXPERIMENT TUNING GRID
 # =====================================================================
-param_grid = { "xgbclassifier__n_estimators": [50, 75, 80,100], "xgbclassifier__max_depth": [2,3,4,5,6,7,8], "xgbclassifier__learning_rate": [0.05, 0.08,0.1,0.15]}
+# param_grid = { "xgbclassifier__n_estimators": [50, 75, 80,100], "xgbclassifier__max_depth": [2,3,4,5,6,7,8], "xgbclassifier__learning_rate": [0.05, 0.08,0.1,0.15]}
+
+param_distributions = {
+    "xgbclassifier__n_estimators": [100, 200, 300,500],
+    "xgbclassifier__max_depth": [2,3,4,5,6,7,8],
+    "xgbclassifier__learning_rate": [0.01,0.03,0.05,0.1],
+    "xgbclassifier__subsample": [0.7,0.8,0.9,1],
+    "xgbclassifier__colsample_bytree": [0.7,0.8,0.9,1],
+    "xgbclassifier__min_child_weight": [1,3,5],
+    "xgbclassifier__gamma": [0,0.1,0.3],
+    "xgbclassifier_reg_alpha":[0,0.1,1],
+    "xgbclassifier_reg_lambda":[1,25]
+}
 
 # Configure Local MLflow Repository Space
 # if "MLFLOW_TRACKING_URI" in os.environ and os.environ["MLFLOW_TRACKING_URI"].strip():
@@ -103,18 +121,27 @@ with mlflow.start_run() as parent_run:
     print("Executing hyperparameter space grid optimization...")
     print("Tracking URI:", mlflow.get_tracking_uri())
     print("Artifact URI:", mlflow.get_artifact_uri())
-    # Grid Search using 5-Fold cross-validation matching your coding style
-    grid_search = GridSearchCV(model_pipeline, param_grid, cv=5, n_jobs=-1, scoring='f1')
-    grid_search.fit(Xtrain, ytrain)
+    # Grid Search using 5-Fold cross-validation
+    # grid_search = GridSearchCV(model_pipeline, param_grid, cv=5, n_jobs=-1, scoring='f1')
+    # grid_search.fit(Xtrain, ytrain)
+
+    # # Extract results array to iterate over manually
+    # results = grid_search.cv_results_
+
+    # Random Search using 5-Fold cross-validation
+    random_search = RandomizedSearchCV(model_pipeline, param_distributions, n_iter=100,cv=5,n_jobs=-1,scoring='f1',random_state=42)
+    random_search.fit(Xtrain, ytrain)
 
     # Extract results array to iterate over manually
-    results = grid_search.cv_results_
+    results = random_search.cv_results_
+
+
     for i in range(len(results["params"])):
         param_set = results["params"][i]
         mean_score = results["mean_test_score"][i]
         std_score = results["std_test_score"][i]
 
-       
+
         clean_params = {k.replace("xgbclassifier__", ""): v for k, v in param_set.items()}
 
         # Log each combination cleanly as a separate child/nested MLflow run
@@ -124,14 +151,31 @@ with mlflow.start_run() as parent_run:
             mlflow.log_metric("std_test_score", std_score)
 
     # Log optimal model parameters to the root parent execution
-    clean_best_params = {k.replace("xgbclassifier__", ""): v for k, v in grid_search.best_params_.items()}
+    # clean_best_params = {k.replace("xgbclassifier__", ""): v for k, v in grid_search.best_params_.items()}
+    clean_best_params = {k.replace("xgbclassifier__", ""): v for k, v in random_search.best_params_.items()}
     mlflow.log_params(clean_best_params)
 
     # Store and isolate the absolute best performing configuration model
-    best_model = grid_search.best_estimator_
+    # best_model = grid_search.best_estimator_
+    best_model = random_search.best_estimator_
 
+
+    thresholds = np.arange(0.30,0.45,0.71,0.01)
+
+    best_threshold = 0.5
+    best_f1 = 0
+
+    for t in thresholds:
+      pred = (y_pred_val_proba >= t).astype(int)
+      score = f1_score(yval,pred)
+
+      if score > best_f1:
+          best_f1 = score
+          best_threshold = t
+
+    classification_threshold = best_threshold
     # Custom inference probability thresholding (0.45)
-    classification_threshold = 0.45
+    # classification_threshold = 0.45
 
     # Probability extraction and threshold assignment for the Train partition
     y_pred_train_proba = best_model.predict_proba(Xtrain)[:, 1]
@@ -140,10 +184,15 @@ with mlflow.start_run() as parent_run:
     # Probability extraction and threshold assignment for the Validation partition
     y_pred_val_proba = best_model.predict_proba(Xval)[:, 1]
     y_pred_val = (y_pred_val_proba >= classification_threshold).astype(int)
+    # Model Evaluation on Test Dataset
+    y_pred_test_proba = best_model.predict_proba(Xtest)[:,1]
+    y_pred_test = (y_pred_test_proba >= classification_threshold).astype(int)
+
 
     # Compute dictionary-based metric matrices
     train_report = classification_report(ytrain, y_pred_train, output_dict=True)
     val_report = classification_report(yval, y_pred_val, output_dict=True)
+    test_report = classification_report(ytest,y_pred_test,output_dict=True)
 
     # Log comprehensive system performance parameters to the root path
     mlflow.log_metrics({
@@ -154,13 +203,25 @@ with mlflow.start_run() as parent_run:
         "val_accuracy": val_report["accuracy"],
         "val_precision": val_report["1"]["precision"],
         "val_recall": val_report["1"]["recall"],
-        "val_f1-score": val_report["1"]["f1-score"]
+        "val_f1-score": val_report["1"]["f1-score"],
+        "test_accuracy": test_report["accuracy"],
+        "test_precision": test_report["1"]["precision"],
+        "test_recall": test_report["1"]["recall"],
+        "test_f1-score": test_report["1"]["f1-score"]
     })
 
     print("\n--- Model Training & Manual Nested Logging Completed Successfully ---")
     print(f"Optimal Hyperparameters: {clean_best_params}")
     print(f"Final Validation F1-Score (at 0.45 threshold): {val_report['1']['f1-score']:.4f}")
-    
+    print(f"Final Validation Accuracy (at 0.45 threshold): {val_report['accuracy']:.4f}")
+    print(f"Final Validation recall (at 0.45 threshold): {val_report['1']['recall']:.4f}")
+    print(f"Final Validation precision (at 0.45 threshold): {val_report['1']['precision']:.4f}")
+    print(f"Final Test F1-Score (at 0.45 threshold): {test_report['1']['f1-score']:.4f}")
+    print(f"Final Test Accuracy (at 0.45 threshold): {test_report['accuracy']:.4f}")
+    print(f"Final Test recall (at 0.45 threshold): {test_report['1']['recall']:.4f}")
+    print(f"Final test precision (at 0.45 threshold): {test_report['1']['precision']:.4f}")
+
+
     # Save model and log artifact safely
     model_dir = "tourism_project/deployment"
     os.makedirs(model_dir, exist_ok=True)
