@@ -8,7 +8,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.pipeline import Pipeline
 import warnings, sys,os
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report,f1_score, roc_auc_score
+
 
 
 
@@ -90,17 +91,16 @@ model_pipeline = Pipeline(steps=[
 # param_grid = { "xgbclassifier__n_estimators": [50, 75, 80,100], "xgbclassifier__max_depth": [2,3,4,5,6,7,8], "xgbclassifier__learning_rate": [0.05, 0.08,0.1,0.15]}
 
 param_distributions = {
-    "xgbclassifier__n_estimators": [100, 200, 300,500],
-    "xgbclassifier__max_depth": [2,3,4,5,6,7,8],
+    "xgbclassifier__n_estimators": [100,200,300,500],
     "xgbclassifier__learning_rate": [0.01,0.03,0.05,0.1],
-    "xgbclassifier__subsample": [0.7,0.8,0.9,1],
-    "xgbclassifier__colsample_bytree": [0.7,0.8,0.9,1],
-    "xgbclassifier__min_child_weight": [1,3,5],
-    "xgbclassifier__gamma": [0,0.1,0.3],
-    "xgbclassifier__reg_lambda": [0, 0.5, 1],
-    "xgbclassifier__reg_alpha": [0, 0.5, 1]
+    "xgbclassifier__max_depth": [3,4,5,6,8],
+    "xgbclassifier__min_child_weight": [1,3,5,7],
+    "xgbclassifier__gamma": [0,0.1,0.3,0.5],
+    "xgbclassifier__subsample": [0.6,0.8,1.0],
+    "xgbclassifier__colsample_bytree": [0.6,0.8,1.0],
+    "xgbclassifier__reg_alpha": [0,0.1,0.5,1],
+    "xgbclassifier__reg_lambda": [0.5,1,2,5]
 }
-
 # Configure Local MLflow Repository Space
 # if "MLFLOW_TRACKING_URI" in os.environ and os.environ["MLFLOW_TRACKING_URI"].strip():
 #     tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
@@ -129,7 +129,15 @@ with mlflow.start_run() as parent_run:
     # results = grid_search.cv_results_
 
     # Random Search using 5-Fold cross-validation
-    random_search = RandomizedSearchCV(model_pipeline, param_distributions, n_iter=100,cv=5,n_jobs=-1,scoring='f1',random_state=42)
+    random_search = RandomizedSearchCV(
+    estimator=model_pipeline,
+    param_distributions=param_distributions,
+    n_iter=100,
+    cv=5,
+    scoring="f1",
+    random_state=42,
+    n_jobs=-1
+)
     random_search.fit(Xtrain, ytrain)
 
     # Extract results array to iterate over manually
@@ -160,20 +168,29 @@ with mlflow.start_run() as parent_run:
     best_model = random_search.best_estimator_
 
 
-    thresholds = np.arange(0.30,0.45,0.71,0.01)
+    # 2. Predict probabilities on validation set
+    y_pred_val_proba = best_model.predict_proba(Xval)[:, 1]
 
-    best_threshold = 0.5
+    # 3. Search for the best threshold
+    thresholds = np.arange(0.30, 0.71, 0.01)
+
+    best_threshold = 0.50
     best_f1 = 0
 
     for t in thresholds:
       pred = (y_pred_val_proba >= t).astype(int)
-      score = f1_score(yval,pred)
+      score = f1_score(yval, pred)
 
       if score > best_f1:
           best_f1 = score
           best_threshold = t
 
     classification_threshold = best_threshold
+
+    print(f"Best Threshold: {classification_threshold:.2f}")
+    mlflow.log_param("classification_threshold",classification_threshold)
+
+    
     # Custom inference probability thresholding (0.45)
     # classification_threshold = 0.45
 
@@ -182,7 +199,6 @@ with mlflow.start_run() as parent_run:
     y_pred_train = (y_pred_train_proba >= classification_threshold).astype(int)
 
     # Probability extraction and threshold assignment for the Validation partition
-    y_pred_val_proba = best_model.predict_proba(Xval)[:, 1]
     y_pred_val = (y_pred_val_proba >= classification_threshold).astype(int)
     # Model Evaluation on Test Dataset
     y_pred_test_proba = best_model.predict_proba(Xtest)[:,1]
@@ -193,6 +209,14 @@ with mlflow.start_run() as parent_run:
     train_report = classification_report(ytrain, y_pred_train, output_dict=True)
     val_report = classification_report(yval, y_pred_val, output_dict=True)
     test_report = classification_report(ytest,y_pred_test,output_dict=True)
+
+    val_auc = roc_auc_score(yval,y_pred_val_proba)
+
+    test_auc = roc_auc_score(ytest,y_pred_test_proba)
+
+    mlflow.log_metrics({
+    "val_auc": val_auc,
+    "test_auc": test_auc})
 
     # Log comprehensive system performance parameters to the root path
     mlflow.log_metrics({
@@ -212,20 +236,26 @@ with mlflow.start_run() as parent_run:
 
     print("\n--- Model Training & Manual Nested Logging Completed Successfully ---")
     print(f"Optimal Hyperparameters: {clean_best_params}")
-    print(f"Final Validation F1-Score (at 0.45 threshold): {val_report['1']['f1-score']:.4f}")
-    print(f"Final Validation Accuracy (at 0.45 threshold): {val_report['accuracy']:.4f}")
-    print(f"Final Validation recall (at 0.45 threshold): {val_report['1']['recall']:.4f}")
-    print(f"Final Validation precision (at 0.45 threshold): {val_report['1']['precision']:.4f}")
-    print(f"Final Test F1-Score (at 0.45 threshold): {test_report['1']['f1-score']:.4f}")
-    print(f"Final Test Accuracy (at 0.45 threshold): {test_report['accuracy']:.4f}")
-    print(f"Final Test recall (at 0.45 threshold): {test_report['1']['recall']:.4f}")
-    print(f"Final test precision (at 0.45 threshold): {test_report['1']['precision']:.4f}")
+    print(f"Final Validation F1-Score (Threshold={classification_threshold:.2f}): {val_report['1']['f1-score']:.4f}")
+    print(f"Final Validation Accuracy (Threshold={classification_threshold:.2f}): {val_report['accuracy']:.4f}")
+    print(f"Final Validation recall (Threshold={classification_threshold:.2f}): {val_report['1']['recall']:.4f}")
+    print(f"Final Validation precision(Threshold={classification_threshold:.2f}): {val_report['1']['precision']:.4f}")
+    print(f"Final Test F1-Score (Threshold={classification_threshold:.2f}): {test_report['1']['f1-score']:.4f}")
+    print(f"Final Test Accuracy (Threshold={classification_threshold:.2f}): {test_report['accuracy']:.4f}")
+    print(f"Final Test recall (Threshold={classification_threshold:.2f}): {test_report['1']['recall']:.4f}")
+    print(f"Final test precision (Threshold={classification_threshold:.2f}): {test_report['1']['precision']:.4f}")
 
 
     # Save model and log artifact safely
     model_dir = "tourism_project/deployment"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "best_model_tourism_package_prediction_v1.joblib")
-    joblib.dump(best_model, model_path)
+    joblib.dump(
+    {
+        "model": best_model,
+        "threshold": classification_threshold
+    },
+    model_path
+)
     mlflow.log_artifact(model_path, artifact_path="model")
     print(f"Model saved to {model_path}")

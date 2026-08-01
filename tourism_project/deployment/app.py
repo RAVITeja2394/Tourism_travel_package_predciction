@@ -18,7 +18,14 @@ if not os.path.exists(model_path):
     st.stop()
 
 try:
-    model = load_pipeline(model_path)
+    saved_artifact = load_pipeline(model_path)
+
+    if not isinstance(saved_artifact, dict):
+        raise ValueError("Expected a dictionary containing 'model' and 'threshold'.")
+
+    model = saved_artifact.get("model")
+    classification_threshold = saved_artifact.get("threshold", 0.50)
+
 except Exception as e:
     st.error(f"Failed to load model file. Error: {e}")
     st.stop()
@@ -125,27 +132,30 @@ input_data = input_data[feature_order]
 
 # Execute prediction step
 if st.button("Evaluate Package Purchase Likelihood"):
+
     probabilities = model.predict_proba(input_data)
     purchase_probability = probabilities[0][1]
 
-    classification_threshold = 0.45
-    prediction = 1 if purchase_probability >= classification_threshold else 0
+    prediction = int(purchase_probability >= classification_threshold)
 
     st.subheader("Analysis & Outcome Breakdown:")
+
+    st.info(f"Classification Threshold Used: {classification_threshold:.2f}")
 
     if prediction == 1:
         st.success("### Prediction: High Conversion Potential (Target Class 1)")
         st.metric(
             label="Calculated Purchase Propensity",
             value=f"{purchase_probability*100:.2f}%",
-            delta="Exceeds 45% Threshold"
+            delta="Above Decision Threshold"
         )
         st.balloons()
+
     else:
         st.warning("### Prediction: Low Conversion Potential (Target Class 0)")
         st.metric(
             label="Calculated Purchase Propensity",
             value=f"{purchase_probability*100:.2f}%",
-            delta=f"-{(classification_threshold-purchase_probability)*100:.2f}% to threshold",
+            delta=f"{(classification_threshold-purchase_probability)*100:.2f}% below threshold",
             delta_color="inverse"
         )
