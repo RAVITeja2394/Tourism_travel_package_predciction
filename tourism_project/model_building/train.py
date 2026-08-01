@@ -97,8 +97,8 @@ param_distributions = {
     "xgbclassifier__colsample_bytree": [0.7,0.8,0.9,1],
     "xgbclassifier__min_child_weight": [1,3,5],
     "xgbclassifier__gamma": [0,0.1,0.3],
-    "xgbclassifier_reg_alpha":[0,0.1,1],
-    "xgbclassifier_reg_lambda":[1,25]
+    "xgbclassifier__reg_lambda": [0, 0.5, 1],
+    "xgbclassifier__reg_alpha": [0, 0.5, 1]
 }
 
 # Configure Local MLflow Repository Space
